@@ -1,7 +1,9 @@
 # TelematicsHub
 
-A real-time telematics integration pipeline built to demonstrate GPS data ingestion,
-quality validation, and anomaly detection — the core of what Shippeo does at scale.
+A real-time telematics integration pipeline built to mirror what Shippeo does at scale.
+Ingests 2 200+ live GPS positions every 30 seconds, flags ~57% as anomalies across
+3 detectors, and generates an AI cycle summary via a local LLM — all from a single
+`uvicorn api:app`.
 
 Instead of truck telematics providers, the data source is the **OpenSky Network API**
 (live aircraft transponders), which provides the same kind of raw GPS state vectors
