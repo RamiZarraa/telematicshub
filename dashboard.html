@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>TelematicsHub — Live Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────── */
+    #sidebar {
+      width: 320px;
+      min-width: 320px;
+      background: #1a1d27;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #2d3148;
+      overflow-y: auto;
+    }
+
+    #sidebar header {
+      padding: 20px 18px 14px;
+      border-bottom: 1px solid #2d3148;
+    }
+
+    #sidebar header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #7c8ff5;
+      letter-spacing: 0.5px;
+    }
+
+    #sidebar header p {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 3px;
+    }
+
+    .section {
+      padding: 16px 18px;
+      border-bottom: 1px solid #2d3148;
+    }
+
+    .section h2 {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #64748b;
+      margin-bottom: 12px;
+    }
+
+    /* stat cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat-card {
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+
+    .stat-card .value {
+      font-size: 22px;
+      font-weight: 700;
+      color: #e2e8f0;
+    }
+
+    .stat-card .label {
+      font-size: 10px;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    .stat-card.danger .value  { color: #f87171; }
+    .stat-card.warn  .value  { color: #fb923c; }
+    .stat-card.ok    .value  { color: #34d399; }
+
+    /* anomaly breakdown */
+    .breakdown { display: flex; flex-direction: column; gap: 6px; }
+
+    .breakdown-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .breakdown-row .name { color: #94a3b8; }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+
+    .badge.speed  { background: #7f1d1d; color: #fca5a5; }
+    .badge.stale  { background: #78350f; color: #fcd34d; }
+    .badge.bounds { background: #1e3a5f; color: #93c5fd; }
+
+    /* AI summary */
+    #summary-text {
+      font-size: 12px;
+      line-height: 1.7;
+      color: #94a3b8;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    /* refresh indicator */
+    #refresh-bar {
+      padding: 12px 18px;
+      font-size: 11px;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #34d399;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    #countdown { color: #7c8ff5; font-weight: 600; }
+
+    /* ── Map ─────────────────────────────────────── */
+    #map {
+      flex: 1;
+      background: #0f1117;
+    }
+
+    .plane-marker { line-height: 1; }
+    .plane-marker svg { display: block; }
+
+    /* popup */
+    .leaflet-popup-content-wrapper {
+      background: #1a1d27;
+      color: #e2e8f0;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      font-size: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .leaflet-popup-tip { background: #1a1d27; }
+
+    .popup-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: #7c8ff5;
+      margin-bottom: 6px;
+    }
+
+    .popup-row { margin: 3px 0; color: #94a3b8; }
+    .popup-row span { color: #e2e8f0; }
+
+    .anomaly-tag {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .tag-speed  { background: #7f1d1d; color: #fca5a5; }
+    .tag-stale  { background: #78350f; color: #fcd34d; }
+    .tag-bounds { background: #1e3a5f; color: #93c5fd; }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ──────────────────────────────────────────── -->
+<div id="sidebar">
+  <header>
+    <h1>TelematicsHub</h1>
+    <p>Live aircraft telematics · OpenSky Network</p>
+  </header>
+
+  <div class="section">
+    <h2>Cycle Overview</h2>
+    <div class="stats-grid">
+      <div class="stat-card ok">
+        <div class="value" id="stat-positions">—</div>
+        <div class="label">Positions</div>
+      </div>
+      <div class="stat-card danger">
+        <div class="value" id="stat-anomalies">—</div>
+        <div class="label">Anomalies</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="stat-cycle">—</div>
+        <div class="label">Cycle ID</div>
+      </div>
+      <div class="stat-card warn">
+        <div class="value" id="stat-rate">—</div>
+        <div class="label">Anomaly rate</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Anomaly Breakdown</h2>
+    <div class="breakdown">
+      <div class="breakdown-row">
+        <span class="name">Impossible speed</span>
+        <span class="badge speed" id="bd-speed">—</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="name">Stale data</span>
+        <span class="badge stale" id="bd-stale">—</span>
+      </div>
+      <div class="breakdown-row">
+        <span class="name">Out of bounds</span>
+        <span class="badge bounds" id="bd-bounds">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" style="flex:1">
+    <h2>AI Cycle Summary</h2>
+    <div id="summary-text">Loading…</div>
+  </div>
+
+  <div id="refresh-bar">
+    <div class="dot"></div>
+    <span>Next refresh in <span id="countdown">30</span>s</span>
+  </div>
+</div>
+
+<!-- ── Map ──────────────────────────────────────────────── -->
+<div id="map"></div>
+
+<script>
+const API = '';
+const REFRESH_INTERVAL = 30;
+
+// ── Map setup ───────────────────────────────────────────
+const map = L.map('map', { zoomControl: true }).setView([46.5, 2.5], 6);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap © CARTO',
+  maxZoom: 19,
+}).addTo(map);
+
+// France bbox overlay
+const franceBbox = [
+  [[41.0, -5.5], [41.0, 9.5], [51.5, 9.5], [51.5, -5.5], [41.0, -5.5]]
+];
+L.polygon(franceBbox, {
+  color: '#7c8ff5',
+  weight: 1.5,
+  fill: false,
+  dashArray: '6 4',
+  opacity: 0.5,
+}).addTo(map).bindTooltip('France expected zone', { permanent: false });
+
+// ── Plane icon factory (SVG, rotated to heading) ─────────
+function planeIcon(heading, hasAnomaly) {
+  const color  = hasAnomaly ? '#f87171' : '#60a5fa';
+  const stroke = hasAnomaly ? '#fca5a5' : '#93c5fd';
+  const angle  = heading ?? 0;
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 100 100"
+         style="transform:rotate(${angle}deg);transform-origin:center">
+      <!-- fuselage -->
+      <ellipse cx="50" cy="50" rx="8" ry="30" fill="${color}" stroke="${stroke}" stroke-width="4"/>
+      <!-- wings -->
+      <ellipse cx="50" cy="48" rx="36" ry="7" fill="${color}" stroke="${stroke}" stroke-width="3"/>
+      <!-- tail -->
+      <ellipse cx="50" cy="74" rx="18" ry="5" fill="${color}" stroke="${stroke}" stroke-width="3"/>
+    </svg>`;
+  return L.divIcon({
+    className: 'plane-marker',
+    html: svg,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+}
+
+// ── Fetch & render ──────────────────────────────────────
+let markers = L.layerGroup().addTo(map);
+
+async function fetchData() {
+  try {
+    const [summaryRes, posRes, anomRes] = await Promise.all([
+      fetch(`${API}/summary`),
+      fetch(`${API}/positions?limit=1000`),
+      fetch(`${API}/anomalies?limit=1000`),
+    ]);
+
+    const summary   = await summaryRes.json();
+    const positions = await posRes.json();
+    const anomalies = await anomRes.json();
+
+    updateSidebar(summary, anomalies);
+    updateMap(positions, anomalies);
+  } catch (e) {
+    document.getElementById('summary-text').textContent =
+      'Could not reach API — is uvicorn running?';
+  }
+}
+
+function updateSidebar(summary, anomalies) {
+  document.getElementById('stat-cycle').textContent     = summary.id ?? '—';
+  document.getElementById('stat-positions').textContent = summary.position_count ?? '—';
+  document.getElementById('stat-anomalies').textContent = summary.anomaly_count ?? '—';
+
+  const rate = summary.position_count
+    ? Math.round((summary.anomaly_count / summary.position_count) * 100)
+    : 0;
+  document.getElementById('stat-rate').textContent = rate + '%';
+
+  // breakdown from current cycle anomalies
+  const byType = { impossible_speed: 0, stale: 0, out_of_bounds: 0 };
+  anomalies.forEach(a => {
+    if (a.cycle_id === summary.id && byType[a.type] !== undefined)
+      byType[a.type]++;
+  });
+  document.getElementById('bd-speed').textContent  = byType.impossible_speed;
+  document.getElementById('bd-stale').textContent  = byType.stale;
+  document.getElementById('bd-bounds').textContent = byType.out_of_bounds;
+
+  const text = summary.summary || 'No summary yet.';
+  document.getElementById('summary-text').textContent = text;
+}
+
+function updateMap(positions, anomalies) {
+  // build a set of icao24s that have anomalies in the latest cycle
+  const anomalyMap = {};
+  anomalies.forEach(a => {
+    if (!anomalyMap[a.icao24]) anomalyMap[a.icao24] = [];
+    anomalyMap[a.icao24].push(a);
+  });
+
+  markers.clearLayers();
+
+  positions.forEach(p => {
+    const hasAnomaly = !!anomalyMap[p.icao24];
+    const marker = L.marker([p.latitude, p.longitude], { icon: planeIcon(p.true_track, hasAnomaly) });
+
+    const anomalyTags = hasAnomaly
+      ? anomalyMap[p.icao24].map(a => {
+          const cls = a.type === 'impossible_speed' ? 'speed'
+                    : a.type === 'stale'            ? 'stale' : 'bounds';
+          return `<span class="anomaly-tag tag-${cls}">${a.type.replace('_', ' ')}</span>`;
+        }).join(' ')
+      : '';
+
+    marker.bindPopup(`
+      <div class="popup-title">✈ ${p.callsign || p.icao24}</div>
+      <div class="popup-row">Country: <span>${p.origin_country || '—'}</span></div>
+      <div class="popup-row">Lat / Lon: <span>${p.latitude.toFixed(3)}, ${p.longitude.toFixed(3)}</span></div>
+      <div class="popup-row">Altitude: <span>${p.geo_altitude ? Math.round(p.geo_altitude) + ' m' : '—'}</span></div>
+      <div class="popup-row">Speed: <span>${p.velocity ? Math.round(p.velocity * 3.6) + ' km/h' : '—'}</span></div>
+      <div class="popup-row">Heading: <span>${p.true_track ? Math.round(p.true_track) + '°' : '—'}</span></div>
+      ${anomalyTags ? '<div style="margin-top:8px">' + anomalyTags + '</div>' : ''}
+    `);
+
+    markers.addLayer(marker);
+  });
+}
+
+// ── Countdown & auto-refresh ────────────────────────────
+let countdown = REFRESH_INTERVAL;
+
+function tick() {
+  countdown--;
+  document.getElementById('countdown').textContent = countdown;
+  if (countdown <= 0) {
+    countdown = REFRESH_INTERVAL;
+    fetchData();
+  }
+}
+
+fetchData();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

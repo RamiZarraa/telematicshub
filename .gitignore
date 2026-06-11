@@ -1,1 +1,5 @@
-venv/\n__pycache__/\n*.pyc\n.env\ntelematicshub.db
+.venv/
+__pycache__/
+*.pyc
+.env
+telematicshub.db
